@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Zap, ShieldCheck, Activity, Clock, PackageSearch, SlidersHorizontal } from '@lucide/vue';
+import { Zap, ShieldCheck, Activity, Clock, PackageSearch, SlidersHorizontal, ServerCrash } from '@lucide/vue';
 import FlashHero from '@/components/FlashHero.vue';
 import ProductCard from '@/components/ProductCard.vue';
 import ProductArt from '@/components/ProductArt.vue';
 import Countdown from '@/components/Countdown.vue';
 import StatusBadge from '@/components/StatusBadge.vue';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import { money, pct } from '@/lib/format';
 import type { Product, Sale } from '@/lib/types';
 import { useClock } from '@/stores/clock';
@@ -38,6 +38,7 @@ const total = ref(0);
 const page = ref(1);
 const loading = ref(true);
 const loadingMore = ref(false);
+const loadError = ref('');
 const category = computed(() => String(route.query.category ?? ''));
 const sort = computed(() => String(route.query.sort ?? 'popular'));
 const q = computed(() => String(route.query.q ?? ''));
@@ -47,12 +48,18 @@ async function loadProducts(reset = true) {
   ctrl?.abort();
   ctrl = new AbortController();
   if (reset) { page.value = 1; loading.value = true; } else loadingMore.value = true;
+  loadError.value = '';
   try {
     const r = await api.products({ category: category.value, sort: sort.value, q: q.value, page: page.value, pageSize: 12 }, ctrl.signal);
     items.value = reset ? r.items : [...items.value, ...r.items];
     total.value = r.total;
   } catch (e) {
-    if ((e as Error).name !== 'AbortError') items.value = reset ? [] : items.value;
+    if ((e as Error).name !== 'AbortError') {
+      if (reset) { items.value = []; total.value = 0; }
+      loadError.value = e instanceof ApiError && e.status === 0
+        ? 'Cannot reach the FlashCart API. Make sure the backend is running on port 8080.'
+        : `The server returned an error${e instanceof ApiError ? ` (${e.status} ${e.code})` : ''}.`;
+    }
   } finally { loading.value = false; loadingMore.value = false; }
 }
 function more() { page.value++; void loadProducts(false); }
@@ -132,6 +139,12 @@ onBeforeUnmount(() => clearInterval(timer));
         <div v-if="loading" class="grid-products">
           <div v-for="i in 8" :key="i" class="card skel-card"><div class="skeleton" style="aspect-ratio: 1" /><div class="stack" style="--gap: 8px; padding: 14px"><div class="skeleton" style="height: 10px; width: 40%" /><div class="skeleton" style="height: 14px" /><div class="skeleton" style="height: 14px; width: 70%" /><div class="skeleton" style="height: 32px; margin-top: 6px" /></div></div>
         </div>
+        <div v-else-if="loadError" class="empty card card-pad">
+          <ServerCrash :size="36" class="bad" />
+          <h3>Couldn't load products</h3>
+          <p class="muted">{{ loadError }}</p>
+          <button class="btn btn-primary" @click="loadProducts(true); loadSales()">Try again</button>
+        </div>
         <div v-else-if="!items.length" class="empty card card-pad">
           <PackageSearch :size="36" class="muted" />
           <h3>No products match</h3>
@@ -172,4 +185,5 @@ onBeforeUnmount(() => clearInterval(timer));
 .skel-card { overflow: hidden; }
 .empty { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; padding: 48px; }
 .center { display: flex; justify-content: center; }
+.bad { color: var(--hot); }
 </style>

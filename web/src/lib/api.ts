@@ -37,6 +37,8 @@ export async function request<T>(path: string, opts: Opts = {}): Promise<{ data:
   const text = await res.text();
   const json = text ? safeJson(text) : null;
   if (!res.ok) {
+    // the dev proxy answers 500/502/504 with no JSON body when the backend is not running
+    if (!json && [500, 502, 503, 504].includes(res.status)) throw new ApiError(0, 'NETWORK', 'Cannot reach the FlashCart API. Is the backend running?');
     if (res.status === 401 && token) onUnauthorized();
     const retry = Number(res.headers.get('Retry-After')) || undefined;
     throw new ApiError(res.status, json?.code ?? 'HTTP_' + res.status, json?.detail ?? json?.message ?? res.statusText, { ...(json ?? {}), retryAfterSec: json?.retryAfterSec ?? retry });

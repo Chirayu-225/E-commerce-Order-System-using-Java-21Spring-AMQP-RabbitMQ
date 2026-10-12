@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from 'fs';
+import { existsSync, readdirSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { Pool } from 'pg';
 
@@ -12,7 +12,9 @@ export async function runMigrations(pool: Pool, log: (m: string) => void = () =>
       'CREATE TABLE IF NOT EXISTS schema_migrations (version text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())',
     );
     const done = new Set((await client.query<{ version: string }>('SELECT version FROM schema_migrations')).rows.map((r) => r.version));
-    const dir = join(__dirname, 'migrations');
+    // dist/db/migrations (copied by the Nest build) or, as a fallback, the source folder
+    const dir = [join(__dirname, 'migrations'), join(__dirname, '..', '..', 'src', 'db', 'migrations')].find((d) => existsSync(d));
+    if (!dir) throw new Error(`migrations folder not found next to ${__dirname}`);
     for (const file of readdirSync(dir).filter((f) => f.endsWith('.sql')).sort()) {
       if (done.has(file)) continue;
       await client.query('BEGIN');
