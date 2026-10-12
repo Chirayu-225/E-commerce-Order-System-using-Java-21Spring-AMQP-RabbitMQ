@@ -1,0 +1,10 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+loadtest/fixture.json
+coverage/
+.DS_Store
+loadtest/result.json
